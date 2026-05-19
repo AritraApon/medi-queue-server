@@ -23,44 +23,57 @@ const client = new MongoClient(uri, {
 async function run() {
 
   try {
- //Collections
-   const db = client.db('mediQueueDB');
-   const tutorCollection = db.collection('tutors')
+    //Collections
+    const db = client.db('mediQueueDB');
+    const tutorCollection = db.collection('tutors')
 
 
-//    Add tutor POST
+    //    Add tutor POST
 
-   app.post('/tutors' , async(req ,res) =>{
-    const newTutor = req.body;
-   console.log(newTutor)
-    const result = await  tutorCollection.insertOne(newTutor)
-    res.send(result)
+    app.post('/tutors', async (req, res) => {
+      const newTutor = req.body;
+      console.log(newTutor)
+      const result = await tutorCollection.insertOne(newTutor)
+      res.send(result)
 
-   }  )
+    })
 
-//get post
-app.get('/tutors',async (req, res) => {
-  const cursor = tutorCollection.find()
-  const result = await cursor.toArray();
-  res.send(result);
-});
+    //get post
+    app.get('/tutors', async (req, res) => {
+      const cursor = tutorCollection.find()
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-app.get('/tutors/:id', async(req,res)=>{
-  const id = req.params.id
-  const query = {
-    _id: new ObjectId(id)
-  }
-  const result = await tutorCollection.findOne(query)
+    // get tutor details data
 
-  res.send(result)
-})
+    app.get('/tutors/:id', async (req, res) => {
+      const id = req.params.id
+      const query = {
+        _id: new ObjectId(id)
+      }
+      const result = await tutorCollection.findOne(query)
 
-app.get('/my-tutors', async (req, res) => {
-    const email = req.query.email;
-    const query = { userEmail: email };
-    const result = await tutorCollection.find(query).toArray();
-    res.send(result);
-});
+      res.send(result)
+    })
+// my tutor api 
+    app.get('/my-tutors', async (req, res) => {
+      try {
+        const email = req.query.email;
+
+
+        if (!email || email === "undefined") {
+          return res.status(400).send({ message: "Email is missing or invalid" });
+        }
+
+        const query = { userEmail: email };
+        const result = await tutorCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).send({ message: "Database error occurred" });
+      }
+    });
 
 
     // Connect the client to the server	(optional starting in v4.7)
