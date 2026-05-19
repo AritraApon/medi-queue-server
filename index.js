@@ -56,7 +56,9 @@ async function run() {
 
       res.send(result)
     })
-// my tutor api 
+
+
+    // my tutor api
     app.get('/my-tutors', async (req, res) => {
       try {
         const email = req.query.email;
@@ -74,6 +76,55 @@ async function run() {
         res.status(500).send({ message: "Database error occurred" });
       }
     });
+
+
+    // my tutor data update
+    app.patch('/tutors/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const modifiedUser = req.body;
+
+        const updateDocument = {
+          $set: {
+            tutorName: modifiedUser.tutorName,
+            photo: modifiedUser.photo,
+            subject: modifiedUser.subject,
+            teachingMode: modifiedUser.teachingMode,
+            availableDays: modifiedUser.availableDays,
+            availableTime: modifiedUser.availableTime,
+            hourlyFee: modifiedUser.hourlyFee,
+            totalSlot: modifiedUser.totalSlot,
+            sessionDate: modifiedUser.sessionDate,
+            location: modifiedUser.location,
+            experience: modifiedUser.experience,
+          }
+        };
+
+        const result = await tutorCollection.updateOne(filter, updateDocument);
+
+        if (result.modifiedCount > 0) {
+          res.send(result);
+        } else {
+          res.status(404).send({ message: "No changes made or tutor not found" });
+        }
+      } catch (error) {
+        console.error("Update Error:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+
+
+
+    // my tutors data delete
+
+    app.delete('/tutors/:id', async(req,res)=>{
+      const id = req.params.id;
+      const query ={ _id: new ObjectId(id)}
+      const result = await tutorCollection.deleteOne(query)
+      res.send(result)
+    })
 
 
     // Connect the client to the server	(optional starting in v4.7)
