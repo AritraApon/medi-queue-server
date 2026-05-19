@@ -26,13 +26,14 @@ async function run() {
     //Collections
     const db = client.db('mediQueueDB');
     const tutorCollection = db.collection('tutors')
+    const bookingCollection = db.collection('bookings')
 
 
     //    Add tutor POST
 
     app.post('/tutors', async (req, res) => {
       const newTutor = req.body;
-      console.log(newTutor)
+      // console.log(newTutor)
       const result = await tutorCollection.insertOne(newTutor)
       res.send(result)
 
@@ -119,12 +120,84 @@ async function run() {
 
     // my tutors data delete
 
-    app.delete('/tutors/:id', async(req,res)=>{
+    app.delete('/tutors/:id', async (req, res) => {
       const id = req.params.id;
-      const query ={ _id: new ObjectId(id)}
+      const query = { _id: new ObjectId(id) }
       const result = await tutorCollection.deleteOne(query)
       res.send(result)
     })
+
+
+
+    // bookings data post
+   app.post('/bookings', async (req, res) => {
+  try {
+    const bookingData = req.body;
+    const tutorId = bookingData.tutorId;
+    const query = { _id: new ObjectId(tutorId) };
+
+    const tutor = await tutorCollection.findOne(query);
+
+    if (!tutor) {
+      return res.status(404).send({ message: "Tutor not found!" });
+    }
+
+    const currentSlots = parseInt(tutor.totalSlot);
+
+    if (currentSlots <= 0) {
+      return res.status(400).send({ message: "No available slots left." });
+    }
+
+    const bookingResult = await bookingCollection.insertOne(bookingData);
+
+    const updateTutor = await tutorCollection.updateOne(
+      { _id: new ObjectId(tutorId) },
+      { $set: { totalSlot: (currentSlots - 1).toString() } }
+    );
+
+    res.send({ bookingResult, updateTutor });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+});
+    //  get my booking tutors
+    app.get('/my-bookings/:userId', async (req, res) => {
+      const userId = req.params.userId;
+      const query = { studentId: userId };
+      const result = await bookingCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.patch('/bookings/:id', async(req, res)=>{
+      const id = req.params.id;
+      const filter = {
+        _id: new ObjectId(id)
+      };
+      const update = {
+        $set:{
+          status:'Cancelled'
+        }
+      }
+
+      const result = await bookingCollection.updateOne(filter, update)
+      res.send(result)
+
+
+    } )
+
+
+    app.get('/bookings', async (req, res) => {
+      const cursor = bookingCollection.find()
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+
+
+
+
 
 
     // Connect the client to the server	(optional starting in v4.7)
