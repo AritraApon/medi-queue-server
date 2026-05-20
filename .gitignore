@@ -1,4 +1,5 @@
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 
- node_modules/
+# dependencies
+node_modules/
