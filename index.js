@@ -3,6 +3,7 @@ const dotenv = require('dotenv')
 const cors = require('cors')
 dotenv.config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 const app = express()
 const uri = process.env.MONGO_URI;
 const port = process.env.PORT
@@ -18,6 +19,36 @@ const client = new MongoClient(uri, {
   }
 });
 
+// middleware ------------------------------------------------
+
+const JWKS = createRemoteJWKSet(
+  new URL('http://localhost:3000/api/auth/jwks')
+)
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: 'Unauthorized access' });
+  }
+  const token = authHeader.split(' ')[1];
+console.log("Backend e asha token:", token)
+  if (!token) {
+    return res.status(401).json({ message: 'Unauthorized access' });
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+   console.log("Token Payload:", payload);
+    next()
+  }
+ catch(error){
+  console.error("JWT Verification Error:", error.message);
+ return res.status(403).json({ message: 'Unauthorized access' });
+ }
+
+}
+
+// middleware ------------------------------------------------
 
 
 async function run() {
@@ -29,9 +60,9 @@ async function run() {
     const bookingCollection = db.collection('bookings')
 
 
-    //    Add tutor POST
+    //  !  Add tutor POST private
 
-    app.post('/tutors', async (req, res) => {
+    app.post('/tutors',verifyToken, async (req, res) => {
       const newTutor = req.body;
       // console.log(newTutor)
       const result = await tutorCollection.insertOne(newTutor)
@@ -39,7 +70,14 @@ async function run() {
 
     })
 
-    //get all api
+
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
+
+
+    // *get all api
+
+
     app.get('/tutors', async (req, res) => {
       const search = req.query.search;
       let query = {};
@@ -56,15 +94,22 @@ async function run() {
       res.send(result);
     });
 
-    // get home page 6 info api
+    //* get home page 6 info api
+
     app.get('/six-tutors', async (req, res) => {
       const cursor = tutorCollection.find().limit(6)
       const result = await cursor.toArray();
       res.send(result);
     });
-    // get tutor details data
 
-    app.get('/tutors/:id', async (req, res) => {
+
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
+
+
+    // ! get tutor details data private api
+
+    app.get('/tutors/:id',verifyToken, async (req, res) => {
       const id = req.params.id
       const query = {
         _id: new ObjectId(id)
@@ -74,9 +119,13 @@ async function run() {
       res.send(result)
     })
 
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
 
-    // my tutor api
-    app.get('/my-tutors', async (req, res) => {
+
+
+    //! my-tutor api  private
+    app.get('/my-tutors',verifyToken , async (req, res) => {
       try {
         const email = req.query.email;
 
@@ -95,8 +144,11 @@ async function run() {
     });
 
 
-    // my tutor data update
-    app.patch('/tutors/:id', async (req, res) => {
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
+
+    // ! my- tutor data update private
+    app.patch('/tutors/:id', verifyToken , async (req, res) => {
       try {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
@@ -131,10 +183,11 @@ async function run() {
       }
     });
 
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
 
 
-
-    // my tutors data delete
+    //! my-tutors data delete
 
     app.delete('/tutors/:id', async (req, res) => {
       const id = req.params.id;
@@ -143,9 +196,11 @@ async function run() {
       res.send(result)
     })
 
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
 
+    // ! bookings data post private
 
-    // bookings data post
     app.post('/bookings', async (req, res) => {
       try {
         const bookingData = req.body;
@@ -156,15 +211,22 @@ async function run() {
         if (!tutor) {
           return res.status(404).send({ message: "Tutor not found!" });
         }
+
         const currentSlots = parseInt(tutor.totalSlot);
+
+
         if (currentSlots <= 0) {
           return res.status(400).send({ message: "No available slots left." });
         }
+
         const bookingResult = await bookingCollection.insertOne(bookingData);
+
         const updateTutor = await tutorCollection.updateOne(
           { _id: new ObjectId(tutorId) },
           { $set: { totalSlot: (currentSlots - 1).toString() } }
         );
+
+
         res.send({ bookingResult, updateTutor });
 
       } catch (error) {
@@ -172,7 +234,13 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
-    //  get my booking tutors
+
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
+
+    //!  get my booking tutors (private)
+
+
     app.get('/my-bookings/:userId', async (req, res) => {
       const userId = req.params.userId;
       const query = { studentId: userId };
@@ -180,8 +248,11 @@ async function run() {
       res.send(result);
     });
 
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
 
-    // update booking data
+    //! update(cancelled oder) booking data (private)
+
     app.patch('/bookings/:id', async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
@@ -196,6 +267,8 @@ async function run() {
       const booking = await bookingCollection.findOne(filter);
       const result = await bookingCollection.updateOne(filter, update);
 
+      // totalsSlot add ------------------------
+
       if (result.modifiedCount > 0 && booking?.tutorId) {
         const tutor = await tutorCollection.findOne({ _id: new ObjectId(booking.tutorId) });
         if (tutor) {
@@ -206,16 +279,13 @@ async function run() {
           );
         }
       }
-
+      //------------------------------------------------
       res.send(result);
     });
 
+    // ----------------------------------------------------------------
+    // ----------------------------------------------------------------
 
-    app.get('/bookings', async (req, res) => {
-      const cursor = bookingCollection.find()
-      const result = await cursor.toArray();
-      res.send(result);
-    });
 
 
 
