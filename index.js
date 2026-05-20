@@ -39,13 +39,29 @@ async function run() {
 
     })
 
-    //get post
+    //get all api
     app.get('/tutors', async (req, res) => {
-      const cursor = tutorCollection.find()
+      const search = req.query.search;
+      let query = {};
+      if (search) {
+        query = {
+          tutorName: {
+            $regex: search,
+            $options: 'i'
+          }
+        };
+      }
+      const cursor = tutorCollection.find(query)
       const result = await cursor.toArray();
       res.send(result);
     });
 
+    // get home page 6 info api
+    app.get('/six-tutors', async (req, res) => {
+      const cursor = tutorCollection.find().limit(6)
+      const result = await cursor.toArray();
+      res.send(result);
+    });
     // get tutor details data
 
     app.get('/tutors/:id', async (req, res) => {
@@ -130,38 +146,32 @@ async function run() {
 
 
     // bookings data post
-   app.post('/bookings', async (req, res) => {
-  try {
-    const bookingData = req.body;
-    const tutorId = bookingData.tutorId;
-    const query = { _id: new ObjectId(tutorId) };
+    app.post('/bookings', async (req, res) => {
+      try {
+        const bookingData = req.body;
+        const tutorId = bookingData.tutorId;
+        const query = { _id: new ObjectId(tutorId) };
 
-    const tutor = await tutorCollection.findOne(query);
+        const tutor = await tutorCollection.findOne(query);
+        if (!tutor) {
+          return res.status(404).send({ message: "Tutor not found!" });
+        }
+        const currentSlots = parseInt(tutor.totalSlot);
+        if (currentSlots <= 0) {
+          return res.status(400).send({ message: "No available slots left." });
+        }
+        const bookingResult = await bookingCollection.insertOne(bookingData);
+        const updateTutor = await tutorCollection.updateOne(
+          { _id: new ObjectId(tutorId) },
+          { $set: { totalSlot: (currentSlots - 1).toString() } }
+        );
+        res.send({ bookingResult, updateTutor });
 
-    if (!tutor) {
-      return res.status(404).send({ message: "Tutor not found!" });
-    }
-
-    const currentSlots = parseInt(tutor.totalSlot);
-
-    if (currentSlots <= 0) {
-      return res.status(400).send({ message: "No available slots left." });
-    }
-
-    const bookingResult = await bookingCollection.insertOne(bookingData);
-
-    const updateTutor = await tutorCollection.updateOne(
-      { _id: new ObjectId(tutorId) },
-      { $set: { totalSlot: (currentSlots - 1).toString() } }
-    );
-
-    res.send({ bookingResult, updateTutor });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Internal Server Error" });
-  }
-});
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
     //  get my booking tutors
     app.get('/my-bookings/:userId', async (req, res) => {
       const userId = req.params.userId;
@@ -170,22 +180,35 @@ async function run() {
       res.send(result);
     });
 
-    app.patch('/bookings/:id', async(req, res)=>{
+
+    // update booking data
+    app.patch('/bookings/:id', async (req, res) => {
       const id = req.params.id;
-      const filter = {
-        _id: new ObjectId(id)
-      };
+      const filter = { _id: new ObjectId(id) };
       const update = {
-        $set:{
-          status:'Cancelled'
+        $set:
+        {
+          status: 'Cancelled'
+
+        }
+      };
+
+      const booking = await bookingCollection.findOne(filter);
+      const result = await bookingCollection.updateOne(filter, update);
+
+      if (result.modifiedCount > 0 && booking?.tutorId) {
+        const tutor = await tutorCollection.findOne({ _id: new ObjectId(booking.tutorId) });
+        if (tutor) {
+          const newSlots = (parseInt(tutor.totalSlot) + 1).toString();
+          await tutorCollection.updateOne(
+            { _id: new ObjectId(booking.tutorId) },
+            { $set: { totalSlot: newSlots } }
+          );
         }
       }
 
-      const result = await bookingCollection.updateOne(filter, update)
-      res.send(result)
-
-
-    } )
+      res.send(result);
+    });
 
 
     app.get('/bookings', async (req, res) => {
